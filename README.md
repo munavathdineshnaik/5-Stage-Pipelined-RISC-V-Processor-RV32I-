@@ -22,15 +22,12 @@ The goal was to design and verify a pipelined processor with proper hazard handl
 ---
 
 ## Architecture
+
 ![Architecture](docs/architecture.png)
 
-### Pipeline Stages
+The processor follows a classic 5-stage pipeline:
 
-**IF** – Program Counter and Instruction Memory  
-**ID** – Register File, Control Unit, Immediate Generator  
-**EX** – ALU and Branch Comparator  
-**MEM** – Data Memory  
-**WB** – Write-back to Register File  
+IF → ID → EX → MEM → WB
 
 Pipeline registers:
 - IF/ID  
@@ -40,30 +37,24 @@ Pipeline registers:
 
 ---
 
-## Hazard Handling
+## Hazard & Forwarding Logic
 
-### Data Hazards (RAW)
+![Hazard and Forwarding](docs/hazard_forwarding.png)
 
-Forwarding paths:
+The processor handles hazards using:
+
+### Data Forwarding
 - EX/MEM → EX
 - MEM/WB → EX
-
-Priority is given to the most recent result.
-
----
+- Most recent result has priority
 
 ### Load-Use Hazard
-
-If an instruction depends on a load result from the previous cycle:
-
-- PC and IF/ID are stalled
-- Bubble inserted into ID/EX
-- Execution resumes after 1 cycle
-
----
+- If a load instruction is followed by a dependent instruction:
+  - PC and IF/ID are stalled
+  - Bubble inserted into ID/EX
+  - Execution resumes after 1 cycle
 
 ### Branch Handling
-
 - Branch resolved in EX stage
 - If branch is taken:
   - Pipeline is flushed
@@ -74,13 +65,12 @@ If an instruction depends on a load result from the previous cycle:
 
 ## Pipeline Timing
 
-![Pipeline Timing](docs/pipeline%20timing.png)
+![Pipeline Timing](docs/pipeline_timing.png)
 
 Shows:
 - 1-cycle stall for load-use
 - Correct forwarding behavior
 - Proper pipeline flow
-
 ---
 
 ## Test Program
