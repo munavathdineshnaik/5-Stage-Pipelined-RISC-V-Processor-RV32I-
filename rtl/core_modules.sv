@@ -52,22 +52,27 @@ module alu (
     input  logic [31:0] a, b,
     input  logic [3:0]  alu_ctrl,
     output logic [31:0] alu_result,
-    output logic        zero        
+    output logic        zero
 );
+
     always_comb begin
         case (alu_ctrl)
-            4'b0000: alu_result = a + b;       
-            4'b0001: alu_result = a - b;       
-            4'b0010: alu_result = a & b;       
-            4'b0011: alu_result = a | b;       
-            4'b0100: alu_result = a ^ b;       
-            4'b0101: alu_result = a << b[4:0]; 
-            4'b0110: alu_result = a >> b[4:0]; 
-            4'b0111: alu_result = ($signed(a) < $signed(b)) ? 32'd1 : 32'd0; 
+            4'b0000: alu_result = a + b;                               // ADD
+            4'b0001: alu_result = a - b;                               // SUB
+            4'b0010: alu_result = a & b;                               // AND
+            4'b0011: alu_result = a | b;                               // OR
+            4'b0100: alu_result = a ^ b;                               // XOR
+            4'b0101: alu_result = a << b[4:0];                         // SLL
+            4'b0110: alu_result = a >> b[4:0];                         // SRL
+            4'b0111: alu_result = $signed(a) >>> b[4:0];               // SRA
+            4'b1000: alu_result = ($signed(a) < $signed(b)) ? 32'd1 : 32'd0;  // SLT
+            4'b1001: alu_result = (a < b) ? 32'd1 : 32'd0;             // SLTU
             default: alu_result = 32'd0;
         endcase
     end
-    assign zero = (alu_result == 32'b0);
+
+    assign zero = (alu_result == 32'd0);
+
 endmodule
 
 // 4. MAIN CONTROL UNIT
@@ -81,54 +86,102 @@ module control_unit (
     output logic       branch,
     output logic [1:0] alu_op
 );
+
     always_comb begin
-        reg_write  = 0; mem_read  = 0; mem_write = 0;
-        mem_to_reg = 0; alu_src   = 0; branch    = 0;
+        // Default
+        reg_write  = 0;
+        mem_read   = 0;
+        mem_write  = 0;
+        mem_to_reg = 0;
+        alu_src    = 0;
+        branch     = 0;
         alu_op     = 2'b00;
 
         case (opcode)
+
             7'b0110011: begin // R-type
-                reg_write = 1; alu_op = 2'b10;
+                reg_write = 1;
+                alu_op    = 2'b10;
             end
-            7'b0010011: begin // I-type
-                reg_write = 1; alu_src = 1; alu_op = 2'b11;
+
+            7'b0010011: begin // I-type ALU
+                reg_write = 1;
+                alu_src   = 1;
+                alu_op    = 2'b11;
             end
+
             7'b0000011: begin // Load
-                reg_write = 1; alu_src = 1; mem_read = 1; mem_to_reg = 1; alu_op = 2'b00;
+                reg_write = 1;
+                alu_src   = 1;
+                mem_read  = 1;
+                mem_to_reg= 1;
+                alu_op    = 2'b00;
             end
+
             7'b0100011: begin // Store
-                alu_src = 1; mem_write = 1; alu_op = 2'b00;
+                alu_src   = 1;
+                mem_write = 1;
+                alu_op    = 2'b00;
             end
+
             7'b1100011: begin // Branch
-                branch = 1; alu_op = 2'b01;
+                branch = 1;
+                alu_op = 2'b01;
             end
-            default: ; 
+
+            default: ;
+
         endcase
     end
+
 endmodule
 
 // 5. ALU CONTROL
 module alu_control (
     input  logic [1:0] alu_op,
     input  logic [2:0] funct3,
-    input  logic       funct7_bit, 
+    input  logic       funct7_bit,
     output logic [3:0] alu_ctrl
 );
+
     always_comb begin
         case (alu_op)
-            2'b00: alu_ctrl = 4'b0000; 
-            2'b01: alu_ctrl = 4'b0001; 
-            2'b10: begin              
+
+            2'b00: alu_ctrl = 4'b0000; // ADD (load/store)
+
+            2'b01: alu_ctrl = 4'b0001; // SUB (branch compare)
+
+            2'b10: begin // R-type
                 case (funct3)
-                    3'b000: alu_ctrl = (funct7_bit) ? 4'b0001 : 4'b0000; 
-                    3'b111: alu_ctrl = 4'b0010; 
-                    3'b110: alu_ctrl = 4'b0011; 
-                    3'b100: alu_ctrl = 4'b0100; 
+                    3'b000: alu_ctrl = (funct7_bit) ? 4'b0001 : 4'b0000; // SUB/ADD
+                    3'b111: alu_ctrl = 4'b0010; // AND
+                    3'b110: alu_ctrl = 4'b0011; // OR
+                    3'b100: alu_ctrl = 4'b0100; // XOR
+                    3'b001: alu_ctrl = 4'b0101; // SLL
+                    3'b101: alu_ctrl = (funct7_bit) ? 4'b0111 : 4'b0110; // SRA/SRL
+                    3'b010: alu_ctrl = 4'b1000; // SLT
+                    3'b011: alu_ctrl = 4'b1001; // SLTU
                     default: alu_ctrl = 4'b0000;
                 endcase
             end
-            2'b11: alu_ctrl = 4'b0000; 
+
+            2'b11: begin // I-type arithmetic
+                case (funct3)
+                    3'b000: alu_ctrl = 4'b0000; // ADDI
+                    3'b111: alu_ctrl = 4'b0010; // ANDI
+                    3'b110: alu_ctrl = 4'b0011; // ORI
+                    3'b100: alu_ctrl = 4'b0100; // XORI
+                    3'b010: alu_ctrl = 4'b1000; // SLTI
+                    3'b011: alu_ctrl = 4'b1001; // SLTIU
+                    3'b001: alu_ctrl = 4'b0101; // SLLI
+                    3'b101: alu_ctrl = (funct7_bit) ? 4'b0111 : 4'b0110; // SRAI/SRLI
+                    default: alu_ctrl = 4'b0000;
+                endcase
+            end
+
             default: alu_ctrl = 4'b0000;
+
         endcase
     end
+
 endmodule
