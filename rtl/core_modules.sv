@@ -1,4 +1,3 @@
-// =============================================================
 // RV32I Core Modules
 // 5-Stage Pipelined RISC-V Processor
 // Description:
