@@ -3,46 +3,57 @@ module tb_top;
     logic clk;
     logic rst;
 
-    // Instantiate the Top Module
+    // Instantiate DUT
     riscv_top dut (
         .clk(clk),
         .rst(rst)
     );
 
-    // 100MHz Clock Generation
+    // Clock: 100 MHz
     initial clk = 0;
     always #5 clk = ~clk;
 
     initial begin
-        // 1. Load the machine code into Instruction Memory
+
+        // Load program
         $readmemh("instr.hex", dut.imem.imem);
 
-        // 2. System Reset
-        $display("Time: %0t | System Resetting...", $time);
+        // Reset
         rst = 1;
-        #25;
+        repeat (5) @(posedge clk);
         rst = 0;
-        $display("Time: %0t | Reset Released. Execution Starting...", $time);
 
-        // 3. Run simulation for enough cycles to finish the program
-        #500;
+        $display("Execution Started...");
 
-        // 4. Print Register File contents to verify the program results
-        $display("\n==============================================");
-        $display("FINAL REGISTER VALUES (DECIMAL)");
-        $display("==============================================");
-        $display("x1 (addi 10): %d", dut.rf.rf[1]);
-        $display("x2 (addi 20): %d", dut.rf.rf[2]);
-        $display("x3 (add 1+2): %d", dut.rf.rf[3]); // Should be 30 (Forwarding check)
-        $display("x4 (lw 0[x0]): %d", dut.rf.rf[4]); // Should be 30 (Memory check)
-        $display("x5 (add 4+1): %d", dut.rf.rf[5]); // Should be 40 (Stall + Forwarding check)
-        $display("x6 (addi 100): %d", dut.rf.rf[6]); // Branch test result
-        $display("==============================================\n");
-        
+        // Run for fixed cycles
+        repeat (150) @(posedge clk);
+
+        // ===============================
+        // Self-check section
+        // ===============================
+
+        assert(dut.rf.rf[1] == 10)
+            else $fatal("x1 incorrect");
+
+        assert(dut.rf.rf[2] == 20)
+            else $fatal("x2 incorrect");
+
+        assert(dut.rf.rf[3] == 30)
+            else $fatal("Forwarding failed (x3)");
+
+        assert(dut.rf.rf[4] == 30)
+            else $fatal("Memory failed (x4)");
+
+        assert(dut.rf.rf[5] == 40)
+            else $fatal("Stall/Forwarding failed (x5)");
+
+        $display("=================================");
+        $display("All tests PASSED successfully!");
+        $display("=================================");
+
         $finish;
     end
 
-    // Create waveform file for EPWave
     initial begin
         $dumpfile("dump.vcd");
         $dumpvars(0, tb_top);
