@@ -1,55 +1,73 @@
 // RV32I Core Modules
 // 5-Stage Pipelined RISC-V Processor
-// Description:
+// Includes:
 //   - Program Counter
 //   - Register File
 //   - ALU
 //   - Main Control Unit
 //   - ALU Control
 
-
-
 // 1. PROGRAM COUNTER
 module pc (
     input  logic        clk,
     input  logic        rst,
-    input  logic        stall,   
-    input  logic [31:0] pc_next, 
+    input  logic        stall,
+    input  logic [31:0] pc_next,
     output logic [31:0] pc_out
 );
+
     always_ff @(posedge clk or posedge rst) begin
         if (rst)
-            pc_out <= 32'h0;      
-        else if (!stall)          
+            pc_out <= 32'h0000_0000;
+        else if (!stall)
             pc_out <= pc_next;
     end
+
 endmodule
 
-// 2. REGISTER FILE
+// 2. REGISTER FILE (32 x 32)
 module register_file (
     input  logic        clk,
-    input  logic        reg_write,  
-    input  logic [4:0]  rs1, rs2,   
-    input  logic [4:0]  rd,        
-    input  logic [31:0] write_data, 
-    output logic [31:0] read_data1, 
+    input  logic        reg_write,
+    input  logic [4:0]  rs1,
+    input  logic [4:0]  rs2,
+    input  logic [4:0]  rd,
+    input  logic [31:0] write_data,
+    output logic [31:0] read_data1,
     output logic [31:0] read_data2
 );
+
     logic [31:0] rf [31:0];
 
-    assign read_data1 = (rs1 == 5'b0) ? 32'b0 : rf[rs1];
-    assign read_data2 = (rs2 == 5'b0) ? 32'b0 : rf[rs2];
-
-    always_ff @(posedge clk) begin
-        if (reg_write && (rd != 5'b0)) begin
-            rf[rd] <= write_data;
-        end
+    initial begin
+        integer i;
+        for (i = 0; i < 32; i++)
+            rf[i] = 32'b0;
     end
+
+    // Read with x0 protection + internal forwarding
+    assign read_data1 =
+        (rs1 == 5'd0) ? 32'b0 :
+        (reg_write && (rd == rs1) && (rd != 0)) ? write_data :
+        rf[rs1];
+
+    assign read_data2 =
+        (rs2 == 5'd0) ? 32'b0 :
+        (reg_write && (rd == rs2) && (rd != 0)) ? write_data :
+        rf[rs2];
+
+    // Write operation
+    always_ff @(posedge clk) begin
+        if (reg_write && (rd != 5'd0))
+            rf[rd] <= write_data;
+    end
+
 endmodule
 
 // 3. ALU
 module alu (
-    input  logic [31:0] a, b,
+    input  logic [31:0] a,
+    input  logic [31:0] b,
     input  logic [3:0]  alu_ctrl,
     output logic [31:0] alu_result,
     output logic        zero
@@ -57,17 +75,20 @@ module alu (
 
     always_comb begin
         case (alu_ctrl)
-            4'b0000: alu_result = a + b;                               // ADD
-            4'b0001: alu_result = a - b;                               // SUB
-            4'b0010: alu_result = a & b;                               // AND
-            4'b0011: alu_result = a | b;                               // OR
-            4'b0100: alu_result = a ^ b;                               // XOR
-            4'b0101: alu_result = a << b[4:0];                         // SLL
-            4'b0110: alu_result = a >> b[4:0];                         // SRL
-            4'b0111: alu_result = $signed(a) >>> b[4:0];               // SRA
-            4'b1000: alu_result = ($signed(a) < $signed(b)) ? 32'd1 : 32'd0;  // SLT
-            4'b1001: alu_result = (a < b) ? 32'd1 : 32'd0;             // SLTU
+
+            4'b0000: alu_result = a + b;  // ADD
+            4'b0001: alu_result = a - b;  // SUB
+            4'b0010: alu_result = a & b;  // AND
+            4'b0011: alu_result = a | b;  // OR
+            4'b0100: alu_result = a ^ b;  // XOR
+            4'b0101: alu_result = a << b[4:0];                       // SLL
+            4'b0110: alu_result = a >> b[4:0];                       // SRL
+            4'b0111: alu_result = $signed(a) >>> b[4:0];             // SRA
+            4'b1000: alu_result = ($signed(a) < $signed(b)) ? 32'd1 : 32'd0; // SLT
+            4'b1001: alu_result = (a < b) ? 32'd1 : 32'd0;           // SLTU
+
             default: alu_result = 32'd0;
+
         endcase
     end
 
@@ -78,6 +99,7 @@ endmodule
 // 4. MAIN CONTROL UNIT
 module control_unit (
     input  logic [6:0] opcode,
+
     output logic       reg_write,
     output logic       mem_read,
     output logic       mem_write,
@@ -88,44 +110,45 @@ module control_unit (
 );
 
     always_comb begin
-        // Default
-        reg_write  = 0;
-        mem_read   = 0;
-        mem_write  = 0;
-        mem_to_reg = 0;
-        alu_src    = 0;
-        branch     = 0;
+
+        // Default values
+        reg_write  = 1'b0;
+        mem_read   = 1'b0;
+        mem_write  = 1'b0;
+        mem_to_reg = 1'b0;
+        alu_src    = 1'b0;
+        branch     = 1'b0;
         alu_op     = 2'b00;
 
         case (opcode)
 
             7'b0110011: begin // R-type
-                reg_write = 1;
+                reg_write = 1'b1;
                 alu_op    = 2'b10;
             end
 
-            7'b0010011: begin // I-type ALU
-                reg_write = 1;
-                alu_src   = 1;
+            7'b0010011: begin // I-type arithmetic
+                reg_write = 1'b1;
+                alu_src   = 1'b1;
                 alu_op    = 2'b11;
             end
 
-            7'b0000011: begin // Load
-                reg_write = 1;
-                alu_src   = 1;
-                mem_read  = 1;
-                mem_to_reg= 1;
+            7'b0000011: begin // Load (LW)
+                reg_write  = 1'b1;
+                alu_src    = 1'b1;
+                mem_read   = 1'b1;
+                mem_to_reg = 1'b1;
+                alu_op     = 2'b00;
+            end
+
+            7'b0100011: begin // Store (SW)
+                alu_src   = 1'b1;
+                mem_write = 1'b1;
                 alu_op    = 2'b00;
             end
 
-            7'b0100011: begin // Store
-                alu_src   = 1;
-                mem_write = 1;
-                alu_op    = 2'b00;
-            end
-
-            7'b1100011: begin // Branch
-                branch = 1;
+            7'b1100011: begin // Branch (BEQ)
+                branch = 1'b1;
                 alu_op = 2'b01;
             end
 
@@ -145,11 +168,12 @@ module alu_control (
 );
 
     always_comb begin
+
         case (alu_op)
 
-            2'b00: alu_ctrl = 4'b0000; // ADD (load/store)
+            2'b00: alu_ctrl = 4'b0000; // ADD (Load/Store)
 
-            2'b01: alu_ctrl = 4'b0001; // SUB (branch compare)
+            2'b01: alu_ctrl = 4'b0001; // SUB (Branch compare)
 
             2'b10: begin // R-type
                 case (funct3)
