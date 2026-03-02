@@ -23,7 +23,7 @@ The goal was to design and verify a pipelined processor with proper hazard handl
 
 ## Architecture
 
-![Architecture](docs/architecture.png)
+![Architecture](docs/architechture.png)
 
 The processor follows a classic 5-stage pipeline:
 
@@ -65,7 +65,7 @@ The processor handles hazards using:
 
 ## Pipeline Timing
 
-![Pipeline Timing](docs/pipeline_timing.png)
+![Pipeline Timing](docs/pipeline%20timing.png)
 
 Shows:
 - 1-cycle stall for load-use
