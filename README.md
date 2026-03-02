@@ -22,7 +22,7 @@ The goal was to design and verify a pipelined processor with proper hazard handl
 ---
 
 ## Architecture
-
+![Architecture](docs/architecture.png)
 
 ### Pipeline Stages
 
